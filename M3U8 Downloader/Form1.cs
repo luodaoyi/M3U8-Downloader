@@ -12,12 +12,14 @@ using System.Xml;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace M3U8_Downloader
 {
     public partial class Form1 : Form
     {
-        
+        public bool EnableHttpServer { get; set; }
+        public bool DisposeHttpServer { get; set; }
         [DllImport("kernel32.dll")]
         static extern bool GenerateConsoleCtrlEvent(int dwCtrlEvent, int dwProcessGroupId);
         [DllImport("kernel32.dll")]
@@ -27,10 +29,10 @@ namespace M3U8_Downloader
         [DllImport("kernel32.dll")]
         static extern bool FreeConsole();
         [DllImport("user32.dll")]
-        public static extern bool FlashWindow(IntPtr hWnd,bool bInvert );
+        public static extern bool FlashWindow(IntPtr hWnd, bool bInvert);
 
 
-        int ffmpegid =0;
+        int ffmpegid = 0;
         int SkinId = 0;//默认为Light模式
 
 
@@ -59,17 +61,17 @@ namespace M3U8_Downloader
                 var filenames = (string[])e.Data.GetData(DataFormats.FileDrop);
                 var hz = filenames[0].LastIndexOf('.') + 1;
                 var houzhui = filenames[0].Substring(hz);//文件后缀名
-                if (houzhui == "m3u8"||houzhui == "mkv"||houzhui == "avi"||houzhui == "mp4"||houzhui == "ts"||houzhui == "flv"||houzhui == "f4v"||
-                    houzhui == "wmv"||houzhui == "wm"||houzhui == "mpeg"||houzhui == "mpg"||houzhui == "m4v"||houzhui == "3gp"||houzhui == "rm"||
+                if (houzhui == "m3u8" || houzhui == "mkv" || houzhui == "avi" || houzhui == "mp4" || houzhui == "ts" || houzhui == "flv" || houzhui == "f4v" ||
+                    houzhui == "wmv" || houzhui == "wm" || houzhui == "mpeg" || houzhui == "mpg" || houzhui == "m4v" || houzhui == "3gp" || houzhui == "rm" ||
                     houzhui == "rmvb" || houzhui == "mov" || houzhui == "qt" || houzhui == "m2ts" || houzhui == "m3u" || houzhui == "mts" || houzhui == "txt") //只允许拖入部分文件
                 {
                     e.Effect = DragDropEffects.All;
                     string path = ((System.Array)e.Data.GetData(DataFormats.FileDrop)).GetValue(0).ToString();
                     textBox_Adress.Text = path; //将获取到的完整路径赋值到textBox1
                 }
-                
-            }        
-            
+
+            }
+
         }
 
         private void button_Quit_Click(object sender, EventArgs e)
@@ -84,7 +86,7 @@ namespace M3U8_Downloader
                     Application.Exit();
                 }
                 else
-                { 
+                {
                 }
             }
             else
@@ -92,7 +94,7 @@ namespace M3U8_Downloader
                 Dispose();
                 Application.Exit();
             }
-            
+
         }
 
         private void button_ChangePath_Click(object sender, EventArgs e)
@@ -137,11 +139,11 @@ namespace M3U8_Downloader
                 {
                     Progress = 100;
                 }
-                ProgressBar.Value = Convert.ToInt32(Progress); 
+                ProgressBar.Value = Convert.ToInt32(Progress);
 
-                this.Text = "M3U8 Downloader  by：nilaoda [0.1.1]" +  "     已完成：" + String.Format("{0:F}", Progress) + "%";
+                this.Text = "M3U8 Downloader  by：nilaoda [0.1.1]" + "     已完成：" + String.Format("{0:F}", Progress) + "%";
             }
-            
+
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -191,7 +193,7 @@ namespace M3U8_Downloader
             SaveSettings();
             if (Process.GetProcessesByName("ffmpeg").Length != 0)
             {
-                if (MessageBox.Show("已启动下载进程，确认退出吗", "请确认您的操作", MessageBoxButtons.YesNo,MessageBoxIcon.Warning) == System.Windows.Forms.DialogResult.Yes)
+                if (MessageBox.Show("已启动下载进程，确认退出吗", "请确认您的操作", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == System.Windows.Forms.DialogResult.Yes)
                 {
                     Stop();
                     Dispose();
@@ -258,11 +260,25 @@ namespace M3U8_Downloader
             Exist_Run(@"Tools\FFmpeg_Joiner.exe");
         }
 
-        
+        private void btn_starthttpserver_Click(object sender, EventArgs e)
+        {
+            EnableHttpServer = true;
+            DisposeHttpServer = false;
 
-       
+            Task.Factory.StartNew(() =>
+            {
+                RunHttpServer(this.tbx_httpserver_address.Text, this.tbx_httpserver_filrnameparam.Text, this.tbx_httpserver_urlparam.Text);
+            });
+
+        }
+
+        private void btn_close_httpserver_Click(object sender, EventArgs e)
+        {
+            EnableHttpServer = false;
+            DisposeHttpServer = true;
         }
     }
+}
 
 
 namespace M3U8_Downloader
@@ -280,12 +296,18 @@ namespace M3U8_Downloader
 
         private void button_Download_Click(object sender, EventArgs e)
         {
+
+            BeginDownload();
+        }
+
+        public void BeginDownload()
+        {
             生成日志ToolStripMenuItem.Enabled = true;
 
             if (!Directory.Exists(textBox_DownloadPath.Text))//若文件夹不存在则新建文件夹   
             {
                 Directory.CreateDirectory(textBox_DownloadPath.Text); //新建文件夹   
-            }  
+            }
 
             else
             {
@@ -295,7 +317,6 @@ namespace M3U8_Downloader
                 label6.Visible = true;
                 label7.Visible = true;
             }
-            
         }
 
         private void Exist_Run(string FileName)
@@ -394,7 +415,7 @@ namespace M3U8_Downloader
                 视频合并ToolStripMenuItem.ForeColor = Color.FromArgb(245, 245, 245);
                 SkinId = 1; //记录皮肤模式
             }
-            
+
         }
 
         private void SaveSettings()
@@ -422,31 +443,32 @@ namespace M3U8_Downloader
 
         private void Download()
         {
+            var ffmpegPath = @"Tools\ffmpeg.exe";
             textBox_Info.Text = "";
             if (radioButton1.Checked == true)
             {
                 houzhui.Text = ".mp4";
                 Command.Text = "-threads 0 -i " + "\"" + textBox_Adress.Text + "\"" + " -c copy -y -bsf:a aac_adtstoasc " + "\"" + textBox_DownloadPath.Text + "\\" + textBox_Name.Text + ".mp4" + "\"";
                 // 启动进程执行相应命令,此例中以执行ffmpeg.exe为例  
-                RealAction("Tools\\ffmpeg.exe", Command.Text);
+                RealAction(ffmpegPath, Command.Text);
             }
             if (radioButton2.Checked == true)
             {
                 houzhui.Text = ".mkv";
                 Command.Text = "-threads 0 -i " + "\"" + textBox_Adress.Text + "\"" + " -c copy -y -bsf:a aac_adtstoasc " + "\"" + textBox_DownloadPath.Text + "\\" + textBox_Name.Text + ".mkv" + "\"";
-                RealAction("Tools\\ffmpeg.exe", Command.Text);
+                RealAction(ffmpegPath, Command.Text);
             }
             if (radioButton3.Checked == true)
             {
                 houzhui.Text = ".ts";
                 Command.Text = "-threads 0 -i " + "\"" + textBox_Adress.Text + "\"" + " -c copy -y -f mpegts " + "\"" + textBox_DownloadPath.Text + "\\" + textBox_Name.Text + ".ts" + "\"";
-                RealAction("Tools\\ffmpeg.exe", Command.Text);
+                RealAction(ffmpegPath, Command.Text);
             }
             if (radioButton4.Checked == true)
             {
                 houzhui.Text = ".flv";
                 Command.Text = "-threads 0 -i " + "\"" + textBox_Adress.Text + "\"" + " -c copy -y -f f4v -bsf:a aac_adtstoasc " + "\"" + textBox_DownloadPath.Text + "\\" + textBox_Name.Text + ".flv" + "\"";
-                RealAction("Tools\\ffmpeg.exe", Command.Text);
+                RealAction(ffmpegPath, Command.Text);
             }
         }
 
@@ -526,7 +548,7 @@ namespace M3U8_Downloader
         private void CmdProcess_Exited(object sender, EventArgs e)
         {
             FlashWindow(this.Handle, true);
-            MessageBox.Show("命令执行结束！", "M3U8 Downloader", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.DefaultDesktopOnly);  // 执行结束后触发
-        }  
+            // MessageBox.Show("命令执行结束！", "M3U8 Downloader", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1, MessageBoxOptions.DefaultDesktopOnly);  // 执行结束后触发
+        }
     }
 }
